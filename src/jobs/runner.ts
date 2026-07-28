@@ -90,6 +90,18 @@ function finalizeJob(jobId: string, exitCode: number | null): void {
   const current = registry.readJob(jobId);
   if (!current) return;
 
+  if (current.status !== "running") {
+    // Already terminal (e.g. cancelled by cancelJob before the signaled
+    // process's exit event fired) — don't let a signal-killed process's
+    // exitCode (null, which reads as "failed" below) clobber that status.
+    registry.writeJob({
+      ...current,
+      exitCode: current.exitCode ?? exitCode,
+      finishedAt: current.finishedAt ?? new Date().toISOString(),
+    });
+    return;
+  }
+
   const parsed = parseEvents(readFileSync(registry.eventsPath(jobId), "utf8"));
   const stderrTail = readStderrTail(jobId);
 

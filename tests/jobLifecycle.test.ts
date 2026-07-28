@@ -97,6 +97,44 @@ test("cancelJob terminates a running job and marks it cancelled", async () => {
   assert.throws(() => process.kill(job.pid!, 0));
 });
 
+test("cancelJob's status survives the signaled process's exit event (regression)", async () => {
+  // cancelJob writes status "cancelled" synchronously, before the SIGTERM is even
+  // delivered. When the signaled child later exits, Node reports exitCode === null
+  // (processes killed by a signal get a null exit code), and finalizeJob must not
+  // reinterpret that null as a failure and clobber the "cancelled" status.
+  const jobId = generateJobId();
+  const job = spawnJob({ prompt: "MODE=hang||run forever", workingDirectory: workDir }, jobId);
+  assert.ok(job.pid);
+
+  const start = Date.now();
+  while (!readJob(jobId)!.pid) {
+    if (Date.now() - start > 2000) throw new Error("pid never recorded");
+    await new Promise((r) => setTimeout(r, 25));
+  }
+
+  const cancelled = cancelJob(jobId);
+  assert.equal(cancelled.status, "cancelled");
+
+  // Wait for the process to actually die from the SIGTERM.
+  const deathStart = Date.now();
+  while (true) {
+    try {
+      process.kill(job.pid!, 0);
+    } catch {
+      break;
+    }
+    if (Date.now() - deathStart > 2000) throw new Error("process never died");
+    await new Promise((r) => setTimeout(r, 25));
+  }
+
+  // Give the child's "exit" event handler (finalizeJob) a moment to run and
+  // (incorrectly, pre-fix) overwrite job.json.
+  await new Promise((r) => setTimeout(r, 200));
+
+  const final = readJob(jobId)!;
+  assert.equal(final.status, "cancelled");
+});
+
 test("cancelJob escalates to SIGKILL when the process ignores SIGTERM", async () => {
   const jobId = generateJobId();
   const job = spawnJob({ prompt: "MODE=hang-ignore-sigterm||run forever", workingDirectory: workDir }, jobId);
