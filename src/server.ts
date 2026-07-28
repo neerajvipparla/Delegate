@@ -1,0 +1,56 @@
+import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
+import { delegateInputShape, delegateHandler } from "./tools/delegate.js";
+import { checkStatusInputShape, checkStatusHandler } from "./tools/checkStatus.js";
+import { getResultInputShape, getResultHandler } from "./tools/getResult.js";
+import { listJobsInputShape, listJobsHandler } from "./tools/listJobs.js";
+import { cancelJobInputShape, cancelJobHandler } from "./tools/cancelJob.js";
+
+const server = new McpServer({ name: "claude-delegate", version: "0.1.0" });
+
+server.registerTool(
+  "delegate",
+  {
+    description: "Delegate a coding or research task to OpenCode as a background job in the given working_directory.",
+    inputSchema: delegateInputShape,
+  },
+  delegateHandler
+);
+
+server.registerTool(
+  "check_status",
+  { description: "Check the status of a previously started delegate() job.", inputSchema: checkStatusInputShape },
+  checkStatusHandler
+);
+
+server.registerTool(
+  "get_result",
+  {
+    description:
+      "Get the structured result (summary, output, tokens, cost) of a delegate() job, even while still running.",
+    inputSchema: getResultInputShape,
+  },
+  getResultHandler
+);
+
+server.registerTool(
+  "list_jobs",
+  { description: "List delegate() jobs, optionally filtered by status.", inputSchema: listJobsInputShape },
+  listJobsHandler
+);
+
+server.registerTool(
+  "cancel_job",
+  { description: "Cancel a running delegate() job.", inputSchema: cancelJobInputShape },
+  cancelJobHandler
+);
+
+async function main() {
+  const transport = new StdioServerTransport();
+  await server.connect(transport);
+}
+
+main().catch((err) => {
+  console.error(err);
+  process.exit(1);
+});
