@@ -66,17 +66,19 @@ export async function delegateSyncHandler(
   while (true) {
     await sleep(POLL_INTERVAL_MS);
 
+    const current = readJob(jobId);
+    if (!current) {
+      return errorResult(`job disappeared during wait: ${jobId}`);
+    }
+
     if (extra?.signal?.aborted) {
       // The caller gave up on this request (client timeout or user
       // interrupt) -- never kill the job just because nobody is waiting
       // for it anymore. It keeps running; the caller can pick it back up
-      // with check_status/get_result using the job_id.
-      return jsonResult({ job_id: jobId, status: "running", aborted: true });
-    }
-
-    const current = readJob(jobId);
-    if (!current) {
-      return errorResult(`job disappeared during wait: ${jobId}`);
+      // with check_status/get_result using the job_id. session_id is
+      // included (if known yet) so the caller can also inspect the live
+      // OpenCode session directly rather than only polling job_id.
+      return jsonResult({ job_id: jobId, status: "running", aborted: true, session_id: current.sessionId });
     }
 
     if (current.status !== "running") {
@@ -109,7 +111,7 @@ export async function delegateSyncHandler(
     }
 
     if (Date.now() - start >= maxWaitMs) {
-      return jsonResult({ job_id: jobId, status: "running", timed_out: true });
+      return jsonResult({ job_id: jobId, status: "running", timed_out: true, session_id: current.sessionId });
     }
   }
 }

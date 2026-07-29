@@ -40,7 +40,15 @@ test("delegate rejects a missing working_directory", async () => {
 
 test("delegate -> check_status -> get_result happy path", async () => {
   const delegated = parseFirst(await delegateHandler({ prompt: "hello there", working_directory: workDir }));
-  assert.equal(delegated.status, "running");
+  // delegate() waits briefly for session_id to appear before returning, so
+  // a fast-finishing job (like this fake fixture's ~100ms "success" mode)
+  // can legitimately already be "completed" by the time it returns --
+  // session_id must be present either way.
+  assert.ok(["running", "completed"].includes(delegated.status));
+  assert.ok(
+    delegated.session_id?.startsWith("ses_fake_"),
+    "delegate() should already know the session_id by the time it returns"
+  );
 
   let status = delegated;
   const start = Date.now();

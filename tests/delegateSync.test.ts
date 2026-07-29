@@ -57,6 +57,7 @@ test("delegate_sync falls back to running+timed_out when max_wait_ms is hit but 
   assert.equal(result.status, "running");
   assert.equal(result.timed_out, true);
   assert.ok(result.job_id);
+  assert.ok(result.session_id?.startsWith("ses_fake_"), "timed_out response should still carry the session_id");
 });
 
 test("delegate_sync cancels and reports stalled when opencode produces no further output", async () => {
@@ -90,6 +91,7 @@ test("delegate_sync stops waiting without cancelling the job when the request is
   assert.equal(result.status, "running");
   assert.equal(result.aborted, true);
   assert.ok(result.job_id);
+  assert.ok(result.session_id?.startsWith("ses_fake_"), "aborted response should still carry the session_id");
 
   // The job itself must still be running -- aborting the request must not
   // have killed it.
