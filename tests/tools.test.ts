@@ -98,6 +98,24 @@ test("delegate rejects continuing a session from a different working_directory",
   }
 });
 
+test("delegate accepts a session continuation whose working_directory only differs by a trailing slash", async () => {
+  const first = parseFirst(await delegateHandler({ prompt: "remember X", working_directory: workDir }));
+  let status = first;
+  const start = Date.now();
+  while (status.status === "running") {
+    if (Date.now() - start > 3000) throw new Error("job did not finish in time");
+    await new Promise((r) => setTimeout(r, 50));
+    status = parseFirst(await checkStatusHandler({ job_id: first.job_id }));
+  }
+
+  const result = await delegateHandler({
+    prompt: "continue",
+    working_directory: workDir + "/",
+    session_id: status.session_id,
+  });
+  assert.notEqual(result.isError, true);
+});
+
 test("delegate rejects an unknown session id", async () => {
   const result = await delegateHandler({
     prompt: "continue",
@@ -148,7 +166,7 @@ test("list_jobs reconciles a job orphaned by a simulated server restart", async 
   // that spawned it restarted and lost its in-memory child handle.
   appendFileSync(
     eventsPath(jobId),
-    '{"type":"step_finish","sessionID":"ses_x","part":{"type":"step-finish","tokens":{"total":1,"input":1,"output":0,"reasoning":0,"cache":{"write":0,"read":0}},"cost":0.001}}\n'
+    '{"type":"step_finish","sessionID":"ses_x","part":{"type":"step-finish","reason":"stop","tokens":{"total":1,"input":1,"output":0,"reasoning":0,"cache":{"write":0,"read":0}},"cost":0.001}}\n'
   );
 
   const listed = parseFirst(await listJobsHandler({}));

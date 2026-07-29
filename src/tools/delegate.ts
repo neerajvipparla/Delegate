@@ -1,5 +1,6 @@
 import { z } from "zod";
-import { existsSync, statSync } from "node:fs";
+import { existsSync, statSync, realpathSync } from "node:fs";
+import { resolve } from "node:path";
 import { execFileSync } from "node:child_process";
 import { spawnJob, resolveOpencodeBin } from "../jobs/runner.js";
 import { generateJobId, getJobForSession } from "../jobs/registry.js";
@@ -24,6 +25,8 @@ export async function delegateHandler(
     return errorResult(`working_directory does not exist or is not a directory: ${input.working_directory}`);
   }
 
+  const workingDirectory = realpathSync(resolve(input.working_directory));
+
   if (!binaryResolvable(resolveOpencodeBin())) {
     return errorResult(
       `opencode binary not found: ${resolveOpencodeBin()} (set OPENCODE_BIN or install opencode on PATH)`
@@ -35,9 +38,9 @@ export async function delegateHandler(
     if (!priorJob) {
       return errorResult(`unknown session_id: ${input.session_id}`);
     }
-    if (priorJob.workingDirectory !== input.working_directory) {
+    if (priorJob.workingDirectory !== workingDirectory) {
       return errorResult(
-        `session_id ${input.session_id} was created in ${priorJob.workingDirectory}, not ${input.working_directory}. ` +
+        `session_id ${input.session_id} was created in ${priorJob.workingDirectory}, not ${workingDirectory}. ` +
           "Continuing an opencode session from a different working_directory hangs indefinitely, so this is rejected up front."
       );
     }
@@ -47,7 +50,7 @@ export async function delegateHandler(
   const job = spawnJob(
     {
       prompt: input.prompt,
-      workingDirectory: input.working_directory,
+      workingDirectory,
       title: input.title,
       sessionId: input.session_id,
       fork: input.fork,

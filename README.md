@@ -20,6 +20,12 @@ results, listing, and cancellation.
 
 ## Tools
 
+> **Every delegated run passes `--auto` to OpenCode.** This auto-approves
+> file writes and shell command execution inside the target
+> `working_directory` — OpenCode will not pause to ask for permission before
+> making changes. Only point this tool at a repository you're comfortable
+> having modified unattended.
+
 - `delegate(prompt, working_directory, title?, session_id?, fork?, model?, agent?)`
   — starts an OpenCode run in the background, returns `{ job_id, status, started_at }`.
 - `check_status(job_id)` — cheap status poll.

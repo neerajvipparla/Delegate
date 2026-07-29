@@ -64,3 +64,30 @@ test("returns an empty result for empty input", () => {
   assert.equal(result.sessionId, null);
   assert.equal(result.hasTerminalEvent, false);
 });
+
+test("a step_finish with a non-stop reason is not treated as a terminal event", () => {
+  // Multi-step agentic runs emit one step_finish per LLM step (e.g. before
+  // each tool call), not just once at the end. Only reason "stop" means the
+  // model decided to stop generating, i.e. the run's actual final step.
+  const ndjson =
+    '{"type":"step_finish","sessionID":"ses_x","part":{"type":"step-finish","reason":"tool_use","tokens":{"total":5,"input":5,"output":0,"reasoning":0,"cache":{"write":0,"read":0}},"cost":0.0001}}';
+  const result = parseEvents(ndjson);
+  assert.equal(result.hasTerminalEvent, false);
+});
+
+test("parses an error event with a string error", () => {
+  const ndjson = '{"type":"error","sessionID":"ses_x","error":"authentication failed"}';
+  const result = parseEvents(ndjson);
+  assert.equal(result.error, "authentication failed");
+});
+
+test("parses an error event with an object error by JSON-stringifying it", () => {
+  const ndjson = '{"type":"error","sessionID":"ses_x","error":{"name":"ModelError","message":"quota exceeded"}}';
+  const result = parseEvents(ndjson);
+  assert.equal(result.error, JSON.stringify({ name: "ModelError", message: "quota exceeded" }));
+});
+
+test("returns a null error when no error event is present", () => {
+  const result = parseEvents('{"type":"text","sessionID":"ses_x","part":{"type":"text","text":"ok"}}');
+  assert.equal(result.error, null);
+});

@@ -176,12 +176,49 @@ test("reconcileJob marks a dead-pid job completed if a terminal event was writte
   createJob(job);
   appendFileSync(
     eventsPath(jobId),
-    '{"type":"step_finish","sessionID":"ses_x","part":{"type":"step-finish","tokens":{"total":1,"input":1,"output":0,"reasoning":0,"cache":{"write":0,"read":0}},"cost":0.001}}\n'
+    '{"type":"step_finish","sessionID":"ses_x","part":{"type":"step-finish","reason":"stop","tokens":{"total":1,"input":1,"output":0,"reasoning":0,"cache":{"write":0,"read":0}},"cost":0.001}}\n'
   );
 
   const reconciled = reconcileJob(job);
   assert.equal(reconciled.status, "completed");
   assert.equal(reconciled.tokens?.total, 1);
+});
+
+test("cancelJob reconciles before cancelling and does not destroy a completed orphaned job's result", () => {
+  // Regression for the bug where cancelJob checked job.status directly
+  // (without reconciling first). A job orphaned by a server restart can have
+  // a dead pid on disk but a real terminal event in events.ndjson, meaning
+  // the underlying process actually finished successfully. Calling
+  // cancelJob on it must reconcile first and report the true "completed"
+  // result, not clobber it with "cancelled".
+  const jobId = generateJobId();
+  const job: Job = {
+    jobId,
+    status: "running",
+    pid: 999999, // dead pid, simulating a server restart
+    pidStartedAt: new Date().toISOString(),
+    workingDirectory: workDir,
+    prompt: "x",
+    title: null,
+    sessionId: null,
+    model: null,
+    agent: null,
+    startedAt: new Date().toISOString(),
+    finishedAt: null,
+    exitCode: null,
+    error: null,
+    tokens: null,
+    cost: null,
+  };
+  createJob(job);
+  appendFileSync(
+    eventsPath(jobId),
+    '{"type":"step_finish","sessionID":"ses_x","part":{"type":"step-finish","reason":"stop","tokens":{"total":1,"input":1,"output":0,"reasoning":0,"cache":{"write":0,"read":0}},"cost":0.001}}\n'
+  );
+
+  const result = cancelJob(jobId);
+  assert.equal(result.status, "completed");
+  assert.equal(result.tokens?.total, 1);
 });
 
 test("reconcileJob marks a dead-pid job failed if no terminal event was written", () => {

@@ -113,7 +113,7 @@ function finalizeJob(jobId: string, exitCode: number | null): void {
     tokens: parsed.tokens ?? current.tokens,
     cost: parsed.cost ?? current.cost,
     sessionId: parsed.sessionId ?? current.sessionId,
-    error: exitCode === 0 ? null : stderrTail || `opencode exited with code ${exitCode}`,
+    error: exitCode === 0 ? null : parsed.error || stderrTail || `opencode exited with code ${exitCode}`,
   });
 
   if (parsed.sessionId) {
@@ -147,7 +147,7 @@ export function reconcileJob(job: Job): Job {
         ...job,
         status: "failed",
         finishedAt: job.finishedAt ?? new Date().toISOString(),
-        error: stderrTail || "process exited without a terminal event (unknown exit code)",
+        error: parsed.error || stderrTail || "process exited without a terminal event (unknown exit code)",
       };
 
   registry.writeJob(updated);
@@ -187,10 +187,11 @@ function pidLooksLikeOurs(job: Job): boolean {
 }
 
 export function cancelJob(jobId: string): Job {
-  const job = registry.readJob(jobId);
-  if (!job) {
+  const found = registry.readJob(jobId);
+  if (!found) {
     throw new Error(`job not found: ${jobId}`);
   }
+  const job = reconcileJob(found);
   if (job.status !== "running" || !job.pid) {
     return job;
   }
