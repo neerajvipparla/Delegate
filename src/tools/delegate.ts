@@ -1,9 +1,7 @@
 import { z } from "zod";
-import { existsSync, statSync, realpathSync } from "node:fs";
-import { resolve } from "node:path";
-import { execFileSync } from "node:child_process";
-import { spawnJob, resolveOpencodeBin } from "../jobs/runner.js";
-import { generateJobId, getJobForSession } from "../jobs/registry.js";
+import { spawnJob } from "../jobs/runner.js";
+import { generateJobId } from "../jobs/registry.js";
+import { validateDelegateRequest } from "./validateDelegate.js";
 
 export const delegateInputShape = {
   prompt: z.string().min(1),
@@ -21,36 +19,16 @@ type DelegateInput = z.infer<typeof delegateInputSchema>;
 export async function delegateHandler(
   input: DelegateInput
 ): Promise<{ content: { type: "text"; text: string }[]; isError?: boolean }> {
-  if (!existsSync(input.working_directory) || !statSync(input.working_directory).isDirectory()) {
-    return errorResult(`working_directory does not exist or is not a directory: ${input.working_directory}`);
-  }
-
-  const workingDirectory = realpathSync(resolve(input.working_directory));
-
-  if (!binaryResolvable(resolveOpencodeBin())) {
-    return errorResult(
-      `opencode binary not found: ${resolveOpencodeBin()} (set OPENCODE_BIN or install opencode on PATH)`
-    );
-  }
-
-  if (input.session_id) {
-    const priorJob = getJobForSession(input.session_id);
-    if (!priorJob) {
-      return errorResult(`unknown session_id: ${input.session_id}`);
-    }
-    if (priorJob.workingDirectory !== workingDirectory) {
-      return errorResult(
-        `session_id ${input.session_id} was created in ${priorJob.workingDirectory}, not ${workingDirectory}. ` +
-          "Continuing an opencode session from a different working_directory hangs indefinitely, so this is rejected up front."
-      );
-    }
+  const validation = validateDelegateRequest(input);
+  if (!validation.ok) {
+    return errorResult(validation.error);
   }
 
   const jobId = generateJobId();
   const job = spawnJob(
     {
       prompt: input.prompt,
-      workingDirectory,
+      workingDirectory: validation.workingDirectory,
       title: input.title,
       sessionId: input.session_id,
       fork: input.fork,
@@ -68,15 +46,6 @@ export async function delegateHandler(
       },
     ],
   };
-}
-
-function binaryResolvable(bin: string): boolean {
-  try {
-    execFileSync(process.platform === "win32" ? "where" : "which", [bin], { stdio: "ignore" });
-    return true;
-  } catch {
-    return false;
-  }
 }
 
 function errorResult(message: string) {
