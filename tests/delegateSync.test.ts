@@ -5,6 +5,8 @@ import { tmpdir } from "node:os";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { delegateSyncHandler } from "../src/tools/delegateSync.js";
+import { readJob } from "../src/jobs/registry.js";
+import { cancelJob } from "../src/jobs/runner.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const FAKE_OPENCODE = join(__dirname, "fixtures", "fake-opencode.mjs");
@@ -74,4 +76,26 @@ test("delegate_sync cancels and reports stalled when opencode produces no furthe
 test("delegate_sync rejects a missing working_directory the same way delegate does", async () => {
   const result = await delegateSyncHandler({ prompt: "hi", working_directory: "/no/such/dir" });
   assert.equal(result.isError, true);
+});
+
+test("delegate_sync stops waiting without cancelling the job when the request is aborted", async () => {
+  const controller = new AbortController();
+  const resultPromise = delegateSyncHandler(
+    { prompt: "MODE=hang||hello", working_directory: workDir, max_wait_ms: 10000, stall_timeout_ms: 10000 },
+    { signal: controller.signal }
+  );
+  setTimeout(() => controller.abort(), 250);
+
+  const result = parseFirst(await resultPromise);
+  assert.equal(result.status, "running");
+  assert.equal(result.aborted, true);
+  assert.ok(result.job_id);
+
+  // The job itself must still be running -- aborting the request must not
+  // have killed it.
+  const job = readJob(result.job_id);
+  assert.equal(job?.status, "running");
+
+  // Clean up the still-running fake process so it doesn't leak past this test.
+  cancelJob(result.job_id);
 });

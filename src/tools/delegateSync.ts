@@ -4,6 +4,7 @@ import { spawnJob, cancelJob } from "../jobs/runner.js";
 import { generateJobId, readJob, eventsPath } from "../jobs/registry.js";
 import { validateDelegateRequest } from "./validateDelegate.js";
 import { buildResultPayload } from "../opencode/resultPayload.js";
+import type { Job } from "../types.js";
 
 export const delegateSyncInputShape = {
   prompt: z.string().min(1),
@@ -20,12 +21,21 @@ export const delegateSyncInputShape = {
 const delegateSyncInputSchema = z.object(delegateSyncInputShape);
 type DelegateSyncInput = z.infer<typeof delegateSyncInputSchema>;
 
-const DEFAULT_MAX_WAIT_MS = 300_000;
-const DEFAULT_STALL_TIMEOUT_MS = 30_000;
+const DEFAULT_MAX_WAIT_MS = 300_000; // 5 minutes
+// OpenCode's --format json mode emits nothing while a tool call is in
+// progress -- confirmed empirically with a 40-second shell command that
+// produced zero NDJSON output until it completed. "No new events" is
+// therefore a weak signal for "hung": it can't be distinguished from a
+// long-running build/test/install. Default high (10 minutes) so this is a
+// backstop against a genuinely dead process, not a limiter on normal tool
+// call duration -- under default settings, max_wait_ms's non-destructive
+// fallback (still running, keep tracking it) fires well before this does.
+const DEFAULT_STALL_TIMEOUT_MS = 600_000; // 10 minutes
 const POLL_INTERVAL_MS = 200;
 
 export async function delegateSyncHandler(
-  input: DelegateSyncInput
+  input: DelegateSyncInput,
+  extra?: { signal?: AbortSignal }
 ): Promise<{ content: { type: "text"; text: string }[]; isError?: boolean }> {
   const validation = validateDelegateRequest(input);
   if (!validation.ok) {
@@ -56,6 +66,14 @@ export async function delegateSyncHandler(
   while (true) {
     await sleep(POLL_INTERVAL_MS);
 
+    if (extra?.signal?.aborted) {
+      // The caller gave up on this request (client timeout or user
+      // interrupt) -- never kill the job just because nobody is waiting
+      // for it anymore. It keeps running; the caller can pick it back up
+      // with check_status/get_result using the job_id.
+      return jsonResult({ job_id: jobId, status: "running", aborted: true });
+    }
+
     const current = readJob(jobId);
     if (!current) {
       return errorResult(`job disappeared during wait: ${jobId}`);
@@ -70,7 +88,18 @@ export async function delegateSyncHandler(
       lastEventsSize = size;
       lastProgressAt = Date.now();
     } else if (Date.now() - lastProgressAt >= stallTimeoutMs) {
-      const cancelled = cancelJob(jobId);
+      let cancelled: Job;
+      try {
+        cancelled = cancelJob(jobId);
+      } catch {
+        return errorResult(`job disappeared during wait: ${jobId}`);
+      }
+      if (cancelled.status !== "cancelled") {
+        // The job actually finished (or was cancelled by someone else)
+        // in the narrow window between our stall check and this call --
+        // report what really happened, not a fabricated stall.
+        return jsonResult(buildResultPayload(cancelled));
+      }
       const payload = buildResultPayload(cancelled);
       return jsonResult({
         ...payload,
