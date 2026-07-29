@@ -30,7 +30,12 @@ test(
           })
         ).content[0].text
       );
-      assert.equal(delegated.status, "running");
+      // delegate() waits briefly for session_id before returning, so a
+      // fast real OpenCode response (a trivial PONG-style prompt has
+      // completed in well under a second in practice) can legitimately
+      // already be "completed" by the time this call returns.
+      assert.ok(["running", "completed"].includes(delegated.status));
+      assert.ok(typeof delegated.session_id === "string" && delegated.session_id.length > 0);
 
       let result;
       const start = Date.now();
