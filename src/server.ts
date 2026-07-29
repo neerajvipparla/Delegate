@@ -1,6 +1,7 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { delegateInputShape, delegateHandler } from "./tools/delegate.js";
+import { delegateSyncInputShape, delegateSyncHandler } from "./tools/delegateSync.js";
 import { checkStatusInputShape, checkStatusHandler } from "./tools/checkStatus.js";
 import { getResultInputShape, getResultHandler } from "./tools/getResult.js";
 import { listJobsInputShape, listJobsHandler } from "./tools/listJobs.js";
@@ -15,6 +16,16 @@ server.registerTool(
     inputSchema: delegateInputShape,
   },
   delegateHandler
+);
+
+server.registerTool(
+  "delegate_sync",
+  {
+    description:
+      "Like delegate(), but waits for the job to finish before returning (or falls back to a running job_id if max_wait_ms elapses, or cancels and reports stalled if opencode produces no output for stall_timeout_ms).",
+    inputSchema: delegateSyncInputShape,
+  },
+  delegateSyncHandler
 );
 
 server.registerTool(

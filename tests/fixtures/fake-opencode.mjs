@@ -30,6 +30,29 @@ async function main() {
     return;
   }
 
+  if (mode === "slow") {
+    // Stays alive and keeps producing output (5 heartbeats, 150ms apart,
+    // ~750ms total) before finishing -- used to test delegate_sync's
+    // max_wait_ms fallback (healthy but slow) distinctly from its stall
+    // detection (alive but producing nothing).
+    for (let i = 0; i < 5; i++) {
+      await new Promise((resolve) => setTimeout(resolve, 150));
+      emit({ type: "text", sessionID: sessionId, part: { type: "text", text: `heartbeat ${i}` } });
+    }
+    emit({ type: "text", sessionID: sessionId, part: { type: "text", text: `echo: ${prompt}` } });
+    emit({
+      type: "step_finish",
+      sessionID: sessionId,
+      part: {
+        type: "step-finish",
+        reason: "stop",
+        tokens: { total: 10, input: 8, output: 2, reasoning: 0, cache: { write: 0, read: 0 } },
+        cost: 0.0001,
+      },
+    });
+    process.exit(0);
+  }
+
   await new Promise((resolve) => setTimeout(resolve, 100));
 
   if (mode === "fail") {
