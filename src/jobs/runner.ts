@@ -4,6 +4,7 @@ import { buildOpencodeArgs } from "../opencode/cli.js";
 import { parseEvents } from "../opencode/events.js";
 import * as registry from "./registry.js";
 import type { DelegateRequest, Job } from "../types.js";
+import { log } from "../logging/logger.js";
 
 export function resolveOpencodeBin(): string {
   return process.env.OPENCODE_BIN ?? "opencode";
@@ -50,6 +51,11 @@ export function spawnJob(request: DelegateRequest, jobId: string): Job {
     job.pidStartedAt = startedAt;
     registry.writeJob(job);
   }
+  log("info", "job_spawned", "spawned opencode job", {
+    job_id: jobId,
+    working_directory: request.workingDirectory,
+    opencode_pid: child.pid ?? null,
+  });
 
   const pollHandle = setInterval(() => {
     const current = registry.readJob(jobId);
@@ -75,6 +81,7 @@ export function spawnJob(request: DelegateRequest, jobId: string): Job {
       error: err.message,
       finishedAt: new Date().toISOString(),
     });
+    log("error", "error", "opencode spawn error", { job_id: jobId, error: err.message });
   });
 
   child.on("exit", (code) => {
@@ -114,6 +121,15 @@ function finalizeJob(jobId: string, exitCode: number | null): void {
     cost: parsed.cost ?? current.cost,
     sessionId: parsed.sessionId ?? current.sessionId,
     error: exitCode === 0 ? null : parsed.error || stderrTail || `opencode exited with code ${exitCode}`,
+  });
+
+  log("info", "job_finalized", "job finalized", {
+    job_id: jobId,
+    session_id: parsed.sessionId ?? current.sessionId ?? undefined,
+    status: exitCode === 0 ? "completed" : "failed",
+    exit_code: exitCode,
+    duration_ms: Date.now() - Date.parse(current.startedAt),
+    cost: parsed.cost ?? current.cost ?? null,
   });
 
   if (parsed.sessionId) {
@@ -198,6 +214,7 @@ export function cancelJob(jobId: string): Job {
 
   const updated: Job = { ...job, status: "cancelled", finishedAt: new Date().toISOString() };
   registry.writeJob(updated);
+  log("info", "job_cancelled", "job cancelled", { job_id: jobId, session_id: job.sessionId ?? undefined });
 
   if (!pidLooksLikeOurs(job)) {
     return updated;

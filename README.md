@@ -116,3 +116,31 @@ Use `list_jobs(status?, limit?)` to see known jobs, newest first. Use `cancel_jo
 npm test                             # unit + fake-opencode integration tests
 RUN_REAL_OPENCODE_TESTS=1 npm test   # also runs one real opencode call (spends tokens)
 ```
+
+## Logging
+
+Logging is **off by default**. To enable it, edit `config.json` at the repo root:
+
+```json
+{ "logging": { "enabled": true, "port": 4599 } }
+```
+
+When enabled, the server writes structured NDJSON logs to a single shared file
+`~/.claude-delegate/logs/server.log` (all sessions append to it; the `pid`
+field identifies which server process wrote each line) and serves them live at
+`http://127.0.0.1:<port>`. The viewer has a per-session filter so you can
+isolate a single delegation's logs by its OpenCode `session_id`.
+
+Each line is one JSON object with `ts`, `level`, `pid`, `event`
+(`server_start` / `tool_call` / `tool_result` / `job_spawned` /
+`job_finalized` / `job_cancelled` / `error`), `msg`, and event-specific
+fields (`session_id`, `job_id`, `tool`, `working_directory`,
+`prompt_preview` (truncated), `status`, `exit_code`, `duration_ms`, `cost`,
+`error`).
+
+Because every Claude Code session spawns its own server process, only one
+process binds the viewer port — and because the log file is shared, that one
+viewer shows every session's logs. If the process that owns the port exits
+while other sessions are open, the live view is unavailable until a new
+session rebinds it; the file keeps recording throughout. The config path can
+be overridden with the `CLAUDE_DELEGATE_CONFIG` environment variable.

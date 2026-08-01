@@ -6,6 +6,9 @@ import { checkStatusInputShape, checkStatusHandler } from "./tools/checkStatus.j
 import { getResultInputShape, getResultHandler } from "./tools/getResult.js";
 import { listJobsInputShape, listJobsHandler } from "./tools/listJobs.js";
 import { cancelJobInputShape, cancelJobHandler } from "./tools/cancelJob.js";
+import { loadConfig } from "./config.js";
+import { initLogger } from "./logging/logger.js";
+import { withLogging } from "./logging/toolLogging.js";
 
 const server = new McpServer({ name: "claude-delegate", version: "0.1.0" });
 
@@ -15,7 +18,7 @@ server.registerTool(
     description: "Delegate a coding or research task to OpenCode as a background job in the given working_directory.",
     inputSchema: delegateInputShape,
   },
-  delegateHandler
+  withLogging("delegate", delegateHandler)
 );
 
 server.registerTool(
@@ -25,13 +28,13 @@ server.registerTool(
       "Like delegate(), but waits for the job to finish before returning (or falls back to a running job_id if max_wait_ms elapses, or cancels and reports stalled if opencode produces no output for stall_timeout_ms).",
     inputSchema: delegateSyncInputShape,
   },
-  delegateSyncHandler
+  withLogging("delegate_sync", delegateSyncHandler)
 );
 
 server.registerTool(
   "check_status",
   { description: "Check the status of a previously started delegate() job.", inputSchema: checkStatusInputShape },
-  checkStatusHandler
+  withLogging("check_status", checkStatusHandler)
 );
 
 server.registerTool(
@@ -41,22 +44,23 @@ server.registerTool(
       "Get the structured result (summary, output, tokens, cost) of a delegate() job, even while still running.",
     inputSchema: getResultInputShape,
   },
-  getResultHandler
+  withLogging("get_result", getResultHandler)
 );
 
 server.registerTool(
   "list_jobs",
   { description: "List delegate() jobs, optionally filtered by status.", inputSchema: listJobsInputShape },
-  listJobsHandler
+  withLogging("list_jobs", listJobsHandler)
 );
 
 server.registerTool(
   "cancel_job",
   { description: "Cancel a running delegate() job.", inputSchema: cancelJobInputShape },
-  cancelJobHandler
+  withLogging("cancel_job", cancelJobHandler)
 );
 
 async function main() {
+  initLogger(loadConfig());
   const transport = new StdioServerTransport();
   await server.connect(transport);
 }
