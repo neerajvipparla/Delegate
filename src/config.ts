@@ -30,7 +30,10 @@ export function loadConfig(): AppConfig {
   const logging = (raw as { logging?: unknown })?.logging as { enabled?: unknown; port?: unknown } | undefined;
   const enabled = typeof logging?.enabled === "boolean" ? logging.enabled : DEFAULT_CONFIG.logging.enabled;
   const port =
-    typeof logging?.port === "number" && Number.isInteger(logging.port) && logging.port > 0
+    typeof logging?.port === "number" &&
+    Number.isInteger(logging.port) &&
+    logging.port > 0 &&
+    logging.port <= 65535
       ? logging.port
       : DEFAULT_CONFIG.logging.port;
 

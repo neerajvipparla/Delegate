@@ -36,7 +36,15 @@ export function logFilePath(): string {
   return join(logsDir(), "server.log");
 }
 
+export function isLoggingEnabled(): boolean {
+  return enabled;
+}
+
 export function initLogger(config: AppConfig): void {
+  if (viewer) {
+    try { viewer.close(); } catch {}
+    viewer = null;
+  }
   enabled = false;
   filePath = null;
   viewer = null;

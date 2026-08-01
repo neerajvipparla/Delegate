@@ -45,6 +45,13 @@ test("fills in per-field defaults for missing or wrong-typed fields", () => {
   assert.deepEqual(loadConfig(), { logging: { enabled: false, port: 8080 } });
 });
 
+test("port above the TCP range falls back to the default while keeping a valid enabled", () => {
+  const p = join(dir, "config.json");
+  writeFileSync(p, JSON.stringify({ logging: { enabled: true, port: 70000 } }));
+  process.env.CLAUDE_DELEGATE_CONFIG = p;
+  assert.deepEqual(loadConfig(), { logging: { enabled: true, port: 4599 } });
+});
+
 test("with no env override, resolves the committed repo-root config.json", () => {
   delete process.env.CLAUDE_DELEGATE_CONFIG;
   assert.deepEqual(loadConfig(), { logging: { enabled: false, port: 4599 } });

@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { mkdtempSync, rmSync, existsSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { initLogger, log, logFilePath, logsDir, shutdownLogger } from "../src/logging/logger.js";
+import { initLogger, isLoggingEnabled, log, logFilePath, logsDir, shutdownLogger } from "../src/logging/logger.js";
 
 let home: string;
 
@@ -67,6 +67,13 @@ test("omits undefined fields", () => {
   log("info", "tool_call", "call", { tool: "delegate", session_id: undefined });
   const call = readLines().find((l) => l.event === "tool_call")!;
   assert.equal("session_id" in call, false);
+});
+
+test("isLoggingEnabled reflects the enabled flag", () => {
+  initLogger({ logging: { enabled: false, port: 4599 } });
+  assert.equal(isLoggingEnabled(), false);
+  initLogger({ logging: { enabled: true, port: 0 } });
+  assert.equal(isLoggingEnabled(), true);
 });
 
 test("log() after a disabled init is a silent no-op (does not throw)", () => {

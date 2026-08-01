@@ -1,4 +1,4 @@
-import { log } from "./logger.js";
+import { isLoggingEnabled, log } from "./logger.js";
 
 type ToolResult = { content: { type: "text"; text: string }[]; isError?: boolean };
 
@@ -7,6 +7,7 @@ export function withLogging<A extends Record<string, unknown>>(
   handler: (args: A, extra?: { signal?: AbortSignal }) => Promise<ToolResult>
 ): (args: A, extra?: { signal?: AbortSignal }) => Promise<ToolResult> {
   return async (args: A, extra?: { signal?: AbortSignal }): Promise<ToolResult> => {
+    if (!isLoggingEnabled()) return handler(args, extra);
     const start = Date.now();
     const a = args as Record<string, unknown>;
     log("info", "tool_call", `${toolName} called`, {
@@ -17,7 +18,17 @@ export function withLogging<A extends Record<string, unknown>>(
       session_id: typeof a.session_id === "string" ? a.session_id : undefined,
     });
 
-    const result = await handler(args, extra);
+    let result;
+    try {
+      result = await handler(args, extra);
+    } catch (e) {
+      log("error", "tool_result", `${toolName} threw`, {
+        tool: toolName,
+        error: e instanceof Error ? e.message : String(e),
+        duration_ms: Date.now() - start,
+      });
+      throw e;
+    }
 
     let status: string | undefined;
     let sessionId: string | undefined;

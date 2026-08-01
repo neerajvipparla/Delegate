@@ -49,6 +49,14 @@ test("withLogging emits tool_call and tool_result lines around a handler", async
   assert.ok(delegated.job_id);
 });
 
+test("a throwing wrapped handler re-throws and still logs a tool_result error line", async () => {
+  const wrapped = withLogging("stub", async () => { throw new Error("boom"); });
+  await assert.rejects(wrapped({}), /boom/);
+  const result = lines().find((l) => l.event === "tool_result" && l.tool === "stub");
+  assert.ok(result, "expected a tool_result line");
+  assert.equal(result!.error, "boom");
+});
+
 test("runner logs job_spawned and job_finalized for a delegated job", async () => {
   const res = await delegateHandler({ prompt: "hello", working_directory: workDir });
   const jobId = JSON.parse(res.content[0].text).job_id;

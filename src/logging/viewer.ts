@@ -24,8 +24,10 @@ export function startViewer(port: number, logFilePath: string, onError?: (err: E
       res.writeHead(404, { "content-type": "text/plain" });
       res.end("not found");
     } catch (err) {
-      res.writeHead(500, { "content-type": "text/plain" });
-      res.end("internal error");
+      if (!res.headersSent && !res.destroyed) {
+        res.writeHead(500, { "content-type": "text/plain" });
+        res.end("internal error");
+      }
     }
   });
 
