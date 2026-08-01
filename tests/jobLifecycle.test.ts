@@ -40,7 +40,7 @@ async function waitForStatus(jobId: string, notStatus: string, timeoutMs = 3000)
 
 test("spawnJob runs a job to completion", async () => {
   const jobId = generateJobId();
-  spawnJob({ prompt: "hello", workingDirectory: workDir }, jobId);
+  spawnJob({ prompt: "hello", workingDirectory: workDir, backend: "opencode" }, jobId);
 
   const finished = await waitForStatus(jobId, "running");
   assert.equal(finished.status, "completed");
@@ -54,7 +54,7 @@ test("spawnJob runs a job to completion", async () => {
 
 test("spawnJob patches session_id onto the job before it finishes", async () => {
   const jobId = generateJobId();
-  spawnJob({ prompt: "MODE=hang||hello", workingDirectory: workDir }, jobId);
+  spawnJob({ prompt: "MODE=hang||hello", workingDirectory: workDir, backend: "opencode" }, jobId);
 
   const start = Date.now();
   let job = readJob(jobId)!;
@@ -71,7 +71,7 @@ test("spawnJob patches session_id onto the job before it finishes", async () => 
 
 test("spawnJob marks a non-zero exit as failed with the stderr tail as error", async () => {
   const jobId = generateJobId();
-  spawnJob({ prompt: "MODE=fail||boom", workingDirectory: workDir }, jobId);
+  spawnJob({ prompt: "MODE=fail||boom", workingDirectory: workDir, backend: "opencode" }, jobId);
 
   const finished = await waitForStatus(jobId, "running");
   assert.equal(finished.status, "failed");
@@ -81,7 +81,7 @@ test("spawnJob marks a non-zero exit as failed with the stderr tail as error", a
 
 test("cancelJob terminates a running job and marks it cancelled", async () => {
   const jobId = generateJobId();
-  const job = spawnJob({ prompt: "MODE=hang||run forever", workingDirectory: workDir }, jobId);
+  const job = spawnJob({ prompt: "MODE=hang||run forever", workingDirectory: workDir, backend: "opencode" }, jobId);
   assert.ok(job.pid);
 
   const start = Date.now();
@@ -103,7 +103,7 @@ test("cancelJob's status survives the signaled process's exit event (regression)
   // (processes killed by a signal get a null exit code), and finalizeJob must not
   // reinterpret that null as a failure and clobber the "cancelled" status.
   const jobId = generateJobId();
-  const job = spawnJob({ prompt: "MODE=hang||run forever", workingDirectory: workDir }, jobId);
+  const job = spawnJob({ prompt: "MODE=hang||run forever", workingDirectory: workDir, backend: "opencode" }, jobId);
   assert.ok(job.pid);
 
   const start = Date.now();
@@ -137,7 +137,7 @@ test("cancelJob's status survives the signaled process's exit event (regression)
 
 test("cancelJob escalates to SIGKILL when the process ignores SIGTERM", async () => {
   const jobId = generateJobId();
-  const job = spawnJob({ prompt: "MODE=hang-ignore-sigterm||run forever", workingDirectory: workDir }, jobId);
+  const job = spawnJob({ prompt: "MODE=hang-ignore-sigterm||run forever", workingDirectory: workDir, backend: "opencode" }, jobId);
   assert.ok(job.pid);
 
   const start = Date.now();
@@ -157,6 +157,7 @@ test("reconcileJob marks a dead-pid job completed if a terminal event was writte
   const jobId = generateJobId();
   const job: Job = {
     jobId,
+    backend: "opencode",
     status: "running",
     pid: 999999,
     pidStartedAt: new Date().toISOString(),
@@ -194,6 +195,7 @@ test("cancelJob reconciles before cancelling and does not destroy a completed or
   const jobId = generateJobId();
   const job: Job = {
     jobId,
+    backend: "opencode",
     status: "running",
     pid: 999999, // dead pid, simulating a server restart
     pidStartedAt: new Date().toISOString(),
@@ -225,6 +227,7 @@ test("reconcileJob marks a dead-pid job failed if no terminal event was written"
   const jobId = generateJobId();
   const job: Job = {
     jobId,
+    backend: "opencode",
     status: "running",
     pid: 999999,
     pidStartedAt: new Date().toISOString(),

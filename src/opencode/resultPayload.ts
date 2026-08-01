@@ -1,12 +1,13 @@
 import { readFileSync } from "node:fs";
 import { eventsPath } from "../jobs/registry.js";
-import { parseEvents } from "./events.js";
+import { parseEvents } from "../backends/index.js";
 import type { Job } from "../types.js";
 
 const OUTPUT_CAP = 8000;
 
 export interface ResultPayload {
   job_id: string;
+  backend: Job["backend"];
   status: Job["status"];
   summary: string;
   output: string;
@@ -20,15 +21,18 @@ export interface ResultPayload {
 }
 
 export function buildResultPayload(job: Job, fullOutput?: boolean): ResultPayload {
-  const parsed = parseEvents(readFileSync(eventsPath(job.jobId), "utf8"));
+  const parsed = parseEvents(readFileSync(eventsPath(job.jobId), "utf8"), job.backend);
 
   const truncated = !fullOutput && parsed.output.length > OUTPUT_CAP;
   const output = truncated ? parsed.output.slice(0, OUTPUT_CAP) : parsed.output;
 
-  const durationMs = (job.finishedAt ? Date.parse(job.finishedAt) : Date.now()) - Date.parse(job.startedAt);
+  const durationMs =
+    parsed.durationMs ??
+    (job.finishedAt ? Date.parse(job.finishedAt) : Date.now()) - Date.parse(job.startedAt);
 
   return {
     job_id: job.jobId,
+    backend: job.backend,
     status: job.status,
     summary: parsed.summary,
     output,

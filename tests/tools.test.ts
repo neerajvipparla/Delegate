@@ -154,6 +154,7 @@ test("list_jobs reconciles a job orphaned by a simulated server restart", async 
   const jobId = generateJobId();
   createJob({
     jobId,
+    backend: "opencode",
     status: "running",
     pid: 999999,
     pidStartedAt: new Date().toISOString(),

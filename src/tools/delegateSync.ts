@@ -9,11 +9,13 @@ import type { Job } from "../types.js";
 export const delegateSyncInputShape = {
   prompt: z.string().min(1),
   working_directory: z.string().min(1),
+  backend: z.enum(["opencode", "cursor"]).optional(),
   title: z.string().optional(),
   session_id: z.string().optional(),
   fork: z.boolean().optional(),
   model: z.string().optional(),
   agent: z.string().optional(),
+  mode: z.enum(["plan", "ask"]).optional(),
   max_wait_ms: z.number().int().positive().optional(),
   stall_timeout_ms: z.number().int().positive().optional(),
 };
@@ -21,16 +23,8 @@ export const delegateSyncInputShape = {
 const delegateSyncInputSchema = z.object(delegateSyncInputShape);
 type DelegateSyncInput = z.infer<typeof delegateSyncInputSchema>;
 
-const DEFAULT_MAX_WAIT_MS = 300_000; // 5 minutes
-// OpenCode's --format json mode emits nothing while a tool call is in
-// progress -- confirmed empirically with a 40-second shell command that
-// produced zero NDJSON output until it completed. "No new events" is
-// therefore a weak signal for "hung": it can't be distinguished from a
-// long-running build/test/install. Default high (10 minutes) so this is a
-// backstop against a genuinely dead process, not a limiter on normal tool
-// call duration -- under default settings, max_wait_ms's non-destructive
-// fallback (still running, keep tracking it) fires well before this does.
-const DEFAULT_STALL_TIMEOUT_MS = 600_000; // 10 minutes
+const DEFAULT_MAX_WAIT_MS = 300_000;
+const DEFAULT_STALL_TIMEOUT_MS = 600_000;
 const POLL_INTERVAL_MS = 200;
 
 export async function delegateSyncHandler(
@@ -50,11 +44,13 @@ export async function delegateSyncHandler(
     {
       prompt: input.prompt,
       workingDirectory: validation.workingDirectory,
+      backend: validation.backend,
       title: input.title,
       sessionId: input.session_id,
       fork: input.fork,
       model: input.model,
       agent: input.agent,
+      mode: input.mode,
     },
     jobId
   );
@@ -72,13 +68,13 @@ export async function delegateSyncHandler(
     }
 
     if (extra?.signal?.aborted) {
-      // The caller gave up on this request (client timeout or user
-      // interrupt) -- never kill the job just because nobody is waiting
-      // for it anymore. It keeps running; the caller can pick it back up
-      // with check_status/get_result using the job_id. session_id is
-      // included (if known yet) so the caller can also inspect the live
-      // OpenCode session directly rather than only polling job_id.
-      return jsonResult({ job_id: jobId, status: "running", aborted: true, session_id: current.sessionId });
+      return jsonResult({
+        job_id: jobId,
+        backend: current.backend,
+        status: "running",
+        aborted: true,
+        session_id: current.sessionId,
+      });
     }
 
     if (current.status !== "running") {
@@ -97,21 +93,24 @@ export async function delegateSyncHandler(
         return errorResult(`job disappeared during wait: ${jobId}`);
       }
       if (cancelled.status !== "cancelled") {
-        // The job actually finished (or was cancelled by someone else)
-        // in the narrow window between our stall check and this call --
-        // report what really happened, not a fabricated stall.
         return jsonResult(buildResultPayload(cancelled));
       }
       const payload = buildResultPayload(cancelled);
       return jsonResult({
         ...payload,
         stalled: true,
-        error: payload.error ?? `opencode produced no new output for ${stallTimeoutMs}ms and was cancelled`,
+        error: payload.error ?? `delegate produced no new output for ${stallTimeoutMs}ms and was cancelled`,
       });
     }
 
     if (Date.now() - start >= maxWaitMs) {
-      return jsonResult({ job_id: jobId, status: "running", timed_out: true, session_id: current.sessionId });
+      return jsonResult({
+        job_id: jobId,
+        backend: current.backend,
+        status: "running",
+        timed_out: true,
+        session_id: current.sessionId,
+      });
     }
   }
 }

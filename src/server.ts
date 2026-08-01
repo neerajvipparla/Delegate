@@ -15,7 +15,8 @@ const server = new McpServer({ name: "claude-delegate", version: "0.1.0" });
 server.registerTool(
   "delegate",
   {
-    description: "Delegate a coding or research task to OpenCode as a background job in the given working_directory.",
+    description:
+      "Delegate a coding or research task to OpenCode or Cursor as a background job. Set backend to 'cursor' or 'opencode' from the user's request; default opencode when unspecified.",
     inputSchema: delegateInputShape,
   },
   withLogging("delegate", delegateHandler)
@@ -25,7 +26,7 @@ server.registerTool(
   "delegate_sync",
   {
     description:
-      "Like delegate(), but waits for the job to finish before returning (or falls back to a running job_id if max_wait_ms elapses, or cancels and reports stalled if opencode produces no output for stall_timeout_ms).",
+      "Like delegate(), but waits for the job to finish before returning (or falls back to a running job_id if max_wait_ms elapses, or cancels and reports stalled if no output for stall_timeout_ms). Set backend from the user's request; default opencode.",
     inputSchema: delegateSyncInputShape,
   },
   withLogging("delegate_sync", delegateSyncHandler)
