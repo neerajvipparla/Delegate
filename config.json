@@ -1,0 +1,6 @@
+{
+  "logging": {
+    "enabled": false,
+    "port": 4599
+  }
+}
