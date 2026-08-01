@@ -1,6 +1,6 @@
 import { test, beforeEach, afterEach } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, rmSync, existsSync, readFileSync } from "node:fs";
+import { mkdtempSync, mkdirSync, rmSync, existsSync, readFileSync, writeFileSync, utimesSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { initLogger, isLoggingEnabled, log, logFilePath, logsDir, shutdownLogger } from "../src/logging/logger.js";
@@ -30,6 +30,28 @@ test("disabled logger writes nothing and creates no logs directory", () => {
   assert.equal(existsSync(logsDir()), false);
 });
 
+test("initLogger truncates a log file older than 24h, but keeps a fresh one", () => {
+  // stale file: pre-seed a log and back-date its mtime > 24h
+  mkdirSync(logsDir(), { recursive: true });
+  writeFileSync(logFilePath(), '{"old":"line"}\n');
+  const twoDaysAgo = Date.now() / 1000 - 2 * 24 * 60 * 60;
+  utimesSync(logFilePath(), twoDaysAgo, twoDaysAgo);
+
+  initLogger({ logging: { enabled: true, port: 0 } });
+  // the stale content is gone; only the fresh server_start line remains
+  const lines = readLines();
+  assert.ok(!lines.some((l) => (l as { old?: string }).old === "line"), "stale content should be truncated");
+  assert.ok(lines.some((l) => l.event === "server_start"));
+  shutdownLogger();
+
+  // fresh file (just written above by the running logger) must NOT be truncated on the next init
+  const before = readFileSync(logFilePath(), "utf8");
+  assert.ok(before.length > 0);
+  initLogger({ logging: { enabled: true, port: 0 } });
+  const after = readFileSync(logFilePath(), "utf8");
+  assert.ok(after.length >= before.length, "a recent log file should be kept, not truncated");
+});
+
 test("enabled logger appends an NDJSON line with the required fields", () => {
   initLogger({ logging: { enabled: true, port: 0 } });
   log("info", "job_spawned", "spawned", { job_id: "abc", working_directory: "/repo" });
@@ -50,16 +72,20 @@ test("initLogger writes a server_start line", () => {
   assert.ok(lines.some((l) => l.event === "server_start"));
 });
 
-test("truncates prompt_preview and error to keep lines small", () => {
+test("truncates prompt_preview, response_preview, and error to keep lines small", () => {
   initLogger({ logging: { enabled: true, port: 0 } });
   const big = "x".repeat(5000);
   log("info", "tool_call", "call", { tool: "delegate", prompt_preview: big });
+  log("info", "job_finalized", "done", { response_preview: big });
   log("error", "error", "boom", { error: big });
   const lines = readLines();
   const call = lines.find((l) => l.event === "tool_call")!;
+  const fin = lines.find((l) => l.event === "job_finalized")!;
   const err = lines.find((l) => l.event === "error")!;
-  assert.ok((call.prompt_preview as string).length <= 210);
-  assert.ok((err.error as string).length <= 210);
+  // 500-char cap (+ the "…" marker)
+  assert.ok((call.prompt_preview as string).length <= 510);
+  assert.ok((fin.response_preview as string).length <= 510);
+  assert.ok((err.error as string).length <= 510);
 });
 
 test("omits undefined fields", () => {

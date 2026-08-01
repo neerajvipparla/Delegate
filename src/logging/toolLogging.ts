@@ -2,12 +2,18 @@ import { isLoggingEnabled, log } from "./logger.js";
 
 type ToolResult = { content: { type: "text"; text: string }[]; isError?: boolean };
 
+// Pure poll/read tools that clients call repeatedly while waiting on a job.
+// Logging them floods the log with near-identical lines and buries the real
+// story (delegate -> job_spawned -> job_finalized). The job-lifecycle events
+// already capture every state change, so these are silent.
+const SILENT_TOOLS = new Set(["check_status", "list_jobs"]);
+
 export function withLogging<A extends Record<string, unknown>>(
   toolName: string,
   handler: (args: A, extra?: { signal?: AbortSignal }) => Promise<ToolResult>
 ): (args: A, extra?: { signal?: AbortSignal }) => Promise<ToolResult> {
   return async (args: A, extra?: { signal?: AbortSignal }): Promise<ToolResult> => {
-    if (!isLoggingEnabled()) return handler(args, extra);
+    if (!isLoggingEnabled() || SILENT_TOOLS.has(toolName)) return handler(args, extra);
     const start = Date.now();
     const a = args as Record<string, unknown>;
     log("info", "tool_call", `${toolName} called`, {

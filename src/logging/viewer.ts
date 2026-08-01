@@ -72,7 +72,7 @@ const PAGE_HTML = `<!doctype html>
   header { position: sticky; top: 0; background: #11151f; padding: 8px 12px; border-bottom: 1px solid #1f2733; display: flex; gap: 12px; align-items: center; }
   select { background: #0b0e14; color: #cbd5e1; border: 1px solid #2a3446; padding: 3px 6px; }
   #log { padding: 8px 12px; }
-  .row { display: grid; grid-template-columns: 70px 48px 130px 130px 1fr; gap: 8px; padding: 1px 0; white-space: pre-wrap; word-break: break-word; }
+  .row { display: grid; grid-template-columns: 70px 48px 300px 120px 1fr; gap: 8px; padding: 1px 0; white-space: pre-wrap; word-break: break-word; }
   .row.warn { color: #fbbf24; }
   .row.error { color: #f87171; }
   .t { color: #64748b; } .l { text-transform: uppercase; } .s { color: #7dd3fc; } .e { color: #a5b4fc; }
@@ -96,7 +96,7 @@ const PAGE_HTML = `<!doctype html>
   const logEl = document.getElementById('log');
   const filterEl = document.getElementById('session-filter');
   function esc(s){ return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
-  function shortSid(s){ return s ? s.slice(0,10) : '—'; }
+  function fullSid(s){ return s ? s : '—'; }
   function render(){
     const sel = filterEl.value;
     const atBottom = Math.abs(logEl.scrollHeight - logEl.scrollTop - logEl.clientHeight) < 40;
@@ -110,13 +110,15 @@ const PAGE_HTML = `<!doctype html>
     if (sid && !seen.has(sid)) {
       seen.add(sid);
       const opt = document.createElement('option');
-      opt.value = sid; opt.textContent = sid.slice(0,16);
+      opt.value = sid; opt.textContent = sid;
       filterEl.appendChild(opt);
     }
     const details = [
       e.msg, e.status,
       e.job_id ? 'job=' + e.job_id.slice(0,8) : '',
       e.working_directory,
+      e.prompt_preview ? 'prompt: ' + e.prompt_preview : '',
+      e.response_preview ? 'response: ' + e.response_preview : '',
       e.duration_ms != null ? e.duration_ms + 'ms' : '',
       e.cost != null ? '$' + e.cost : '',
       e.error ? 'err: ' + e.error : ''
@@ -125,7 +127,7 @@ const PAGE_HTML = `<!doctype html>
       '<div class="row ' + esc(e.level) + '">' +
       '<span class="t">' + esc((e.ts||'').slice(11,19)) + '</span>' +
       '<span class="l">' + esc(e.level||'') + '</span>' +
-      '<span class="s">' + esc(shortSid(sid)) + '</span>' +
+      '<span class="s">' + esc(fullSid(sid)) + '</span>' +
       '<span class="e">' + esc(e.event||'') + '</span>' +
       '<span class="d">' + esc(details) + '</span></div>'
     });
