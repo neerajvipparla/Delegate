@@ -51,9 +51,10 @@ test("the page shows full session ids and the prompt/response, not truncated ids
   const { text } = await get(portOf(server), "/");
   // session id is rendered in full — no fixed-width slice of the session value
   assert.ok(!/slice\(0\s*,\s*1[06]\)/.test(text), "session id must not be sliced to a fixed width");
-  // prompt and response are surfaced in the row details
-  assert.match(text, /prompt_preview/);
-  assert.match(text, /response_preview/);
+  // prompt, response, and backend are surfaced in the row details
+  assert.match(text, /e\.prompt/);
+  assert.match(text, /e\.response/);
+  assert.match(text, /e\.backend/);
 });
 
 test("GET /logs?offset=0 returns the file contents and the new offset", async () => {

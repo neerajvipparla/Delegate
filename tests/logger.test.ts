@@ -72,19 +72,20 @@ test("initLogger writes a server_start line", () => {
   assert.ok(lines.some((l) => l.event === "server_start"));
 });
 
-test("truncates prompt_preview, response_preview, and error to keep lines small", () => {
+test("logs prompt and response in full, but caps error", () => {
   initLogger({ logging: { enabled: true, port: 0 } });
   const big = "x".repeat(5000);
-  log("info", "tool_call", "call", { tool: "delegate", prompt_preview: big });
-  log("info", "job_finalized", "done", { response_preview: big });
+  log("info", "tool_call", "call", { tool: "delegate", prompt: big });
+  log("info", "job_finalized", "done", { response: big });
   log("error", "error", "boom", { error: big });
   const lines = readLines();
   const call = lines.find((l) => l.event === "tool_call")!;
   const fin = lines.find((l) => l.event === "job_finalized")!;
   const err = lines.find((l) => l.event === "error")!;
-  // 500-char cap (+ the "…" marker)
-  assert.ok((call.prompt_preview as string).length <= 510);
-  assert.ok((fin.response_preview as string).length <= 510);
+  // prompt + response are kept in full — that's the whole point
+  assert.equal((call.prompt as string).length, 5000);
+  assert.equal((fin.response as string).length, 5000);
+  // only error is capped (500 + the "…" marker)
   assert.ok((err.error as string).length <= 510);
 });
 

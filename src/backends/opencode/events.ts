@@ -48,6 +48,9 @@ export function parseOpencodeEvents(ndjsonText: string): ParsedEvents {
 
   const output = textParts.join("");
   const summary = output.length > SUMMARY_MAX_LENGTH ? output.slice(0, SUMMARY_MAX_LENGTH) + "…" : output;
+  // Final answer = the last text block the model emitted (the closing step),
+  // not the earlier "let me check X" narration.
+  const finalText = textParts.length ? textParts[textParts.length - 1] : "";
 
-  return { output, summary, sessionId, tokens, cost, hasTerminalEvent, error, durationMs: null };
+  return { output, summary, finalText, sessionId, tokens, cost, hasTerminalEvent, error, durationMs: null };
 }

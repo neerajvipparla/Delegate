@@ -18,8 +18,9 @@ export function withLogging<A extends Record<string, unknown>>(
     const a = args as Record<string, unknown>;
     log("info", "tool_call", `${toolName} called`, {
       tool: toolName,
+      backend: typeof a.backend === "string" ? a.backend : undefined,
       working_directory: typeof a.working_directory === "string" ? a.working_directory : undefined,
-      prompt_preview: typeof a.prompt === "string" ? a.prompt : undefined,
+      prompt: typeof a.prompt === "string" ? a.prompt : undefined,
       job_id: typeof a.job_id === "string" ? a.job_id : undefined,
       session_id: typeof a.session_id === "string" ? a.session_id : undefined,
     });
@@ -30,6 +31,7 @@ export function withLogging<A extends Record<string, unknown>>(
     } catch (e) {
       log("error", "tool_result", `${toolName} threw`, {
         tool: toolName,
+        backend: typeof a.backend === "string" ? a.backend : undefined,
         error: e instanceof Error ? e.message : String(e),
         duration_ms: Date.now() - start,
       });
@@ -38,16 +40,19 @@ export function withLogging<A extends Record<string, unknown>>(
 
     let status: string | undefined;
     let sessionId: string | undefined;
+    let backend: string | undefined;
     try {
       const payload = JSON.parse(result.content?.[0]?.text ?? "{}");
       status = typeof payload.status === "string" ? payload.status : undefined;
       sessionId = typeof payload.session_id === "string" ? payload.session_id : undefined;
+      backend = typeof payload.backend === "string" ? payload.backend : undefined;
     } catch {
-      // non-JSON error message body; leave status/sessionId undefined
+      // non-JSON error message body; leave status/sessionId/backend undefined
     }
 
     log(result.isError ? "warn" : "info", "tool_result", `${toolName} returned`, {
       tool: toolName,
+      backend: backend ?? (typeof a.backend === "string" ? a.backend : undefined),
       status: result.isError ? "error" : status,
       session_id: sessionId,
       duration_ms: Date.now() - start,

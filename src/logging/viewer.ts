@@ -115,10 +115,11 @@ const PAGE_HTML = `<!doctype html>
     }
     const details = [
       e.msg, e.status,
+      e.backend ? '[' + e.backend + ']' : '',
       e.job_id ? 'job=' + e.job_id.slice(0,8) : '',
       e.working_directory,
-      e.prompt_preview ? 'prompt: ' + e.prompt_preview : '',
-      e.response_preview ? 'response: ' + e.response_preview : '',
+      e.prompt ? 'prompt: ' + e.prompt : '',
+      e.response ? 'response: ' + e.response : '',
       e.duration_ms != null ? e.duration_ms + 'ms' : '',
       e.cost != null ? '$' + e.cost : '',
       e.error ? 'err: ' + e.error : ''

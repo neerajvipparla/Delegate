@@ -5,6 +5,13 @@ export type BackendKind = "opencode" | "cursor";
 export interface ParsedEvents {
   output: string;
   summary: string;
+  /**
+   * The agent's final answer specifically — the last assistant text block
+   * (OpenCode) or the terminal result (Cursor) — as opposed to `output`,
+   * which is the whole transcript including intermediate "let me do X"
+   * narration. Empty string if the run produced no text.
+   */
+  finalText: string;
   sessionId: string | null;
   tokens: TokenUsage | null;
   cost: number | null;
