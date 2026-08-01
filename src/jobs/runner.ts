@@ -133,6 +133,7 @@ function finalizeJob(jobId: string, exitCode: number | null): void {
     exit_code: exitCode,
     duration_ms: Date.now() - Date.parse(current.startedAt),
     cost: parsed.cost ?? current.cost ?? null,
+    response_preview: parsed.output || undefined,
   });
 
   if (parsed.sessionId) {

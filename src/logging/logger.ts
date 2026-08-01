@@ -1,4 +1,4 @@
-import { appendFileSync, mkdirSync } from "node:fs";
+import { appendFileSync, mkdirSync, writeFileSync, existsSync, statSync } from "node:fs";
 import { join } from "node:path";
 import type { Server } from "node:http";
 import { getDelegateHome } from "../jobs/registry.js";
@@ -13,6 +13,7 @@ export interface LogFields {
   tool?: string;
   working_directory?: string;
   prompt_preview?: string;
+  response_preview?: string;
   status?: string;
   exit_code?: number | null;
   duration_ms?: number | null;
@@ -21,12 +22,14 @@ export interface LogFields {
   [key: string]: unknown;
 }
 
-const FIELD_TRUNCATE_LIMIT = 200;
-const TRUNCATED_FIELDS = new Set(["prompt_preview", "error"]);
+const FIELD_TRUNCATE_LIMIT = 500;
+const TRUNCATED_FIELDS = new Set(["prompt_preview", "response_preview", "error"]);
+const ONE_DAY_MS = 24 * 60 * 60 * 1000;
 
 let enabled = false;
 let filePath: string | null = null;
 let viewer: Server | null = null;
+let truncateTimer: ReturnType<typeof setInterval> | null = null;
 
 export function logsDir(): string {
   return join(getDelegateHome(), "logs");
@@ -45,6 +48,10 @@ export function initLogger(config: AppConfig): void {
     try { viewer.close(); } catch {}
     viewer = null;
   }
+  if (truncateTimer) {
+    clearInterval(truncateTimer);
+    truncateTimer = null;
+  }
   enabled = false;
   filePath = null;
   viewer = null;
@@ -54,6 +61,18 @@ export function initLogger(config: AppConfig): void {
     mkdirSync(logsDir(), { recursive: true });
     filePath = logFilePath();
     enabled = true;
+
+    // Keep the file compact: clear it on startup if it already holds more
+    // than a day of logs, and once a day while running. Lightweight — no
+    // rotation/rename, just empty the file. The viewer tolerates truncation
+    // (a client offset past EOF resets to 0).
+    truncateIfStale();
+    truncateTimer = setInterval(() => {
+      try {
+        if (filePath) writeFileSync(filePath, "");
+      } catch {}
+    }, ONE_DAY_MS);
+    truncateTimer.unref();
 
     log("info", "server_start", "logging enabled", {
       port: config.logging.port,
@@ -102,12 +121,29 @@ function truncate(s: string): string {
   return s.length > FIELD_TRUNCATE_LIMIT ? s.slice(0, FIELD_TRUNCATE_LIMIT) + "…" : s;
 }
 
+// Empty the log file if its last write was more than a day ago, so a server
+// starting up doesn't inherit a stale, unbounded log.
+function truncateIfStale(): void {
+  if (!filePath) return;
+  try {
+    if (existsSync(filePath) && Date.now() - statSync(filePath).mtimeMs > ONE_DAY_MS) {
+      writeFileSync(filePath, "");
+    }
+  } catch {
+    // truncation is best-effort; never let it break startup
+  }
+}
+
 // Closes the viewer and resets logger state. Used by tests; also safe to call
 // on shutdown.
 export function shutdownLogger(): void {
   if (viewer) {
     viewer.close();
     viewer = null;
+  }
+  if (truncateTimer) {
+    clearInterval(truncateTimer);
+    truncateTimer = null;
   }
   enabled = false;
   filePath = null;

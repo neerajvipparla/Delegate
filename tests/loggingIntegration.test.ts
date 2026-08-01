@@ -7,6 +7,8 @@ import { fileURLToPath } from "node:url";
 import { initLogger, logFilePath, shutdownLogger } from "../src/logging/logger.js";
 import { withLogging } from "../src/logging/toolLogging.js";
 import { delegateHandler } from "../src/tools/delegate.js";
+import { checkStatusHandler } from "../src/tools/checkStatus.js";
+import { listJobsHandler } from "../src/tools/listJobs.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const FAKE_OPENCODE = join(__dirname, "fixtures", "fake-opencode.mjs");
@@ -74,4 +76,24 @@ test("runner logs job_spawned and job_finalized for a delegated job", async () =
   // job_spawned carries the resolved working directory (realpath of the input)
   assert.equal(spawned!.working_directory, realpathSync(workDir));
   assert.equal(finalized!.status, "completed");
+  // job_finalized carries the agent's response so the log tells the whole story
+  assert.ok(
+    typeof finalized!.response_preview === "string" && (finalized!.response_preview as string).length > 0,
+    "job_finalized should include a non-empty response_preview"
+  );
+});
+
+test("check_status and list_jobs are silent (no poll spam), delegate is logged", async () => {
+  // these two are pure polls/reads — they must produce no log lines
+  await withLogging("check_status", checkStatusHandler)({ job_id: "nope" });
+  await withLogging("list_jobs", listJobsHandler)({});
+  const afterPolls = lines();
+  assert.ok(
+    !afterPolls.some((l) => l.tool === "check_status" || l.tool === "list_jobs"),
+    "check_status / list_jobs must not be logged"
+  );
+
+  // a real action still is
+  await withLogging("delegate", delegateHandler)({ prompt: "hi", working_directory: workDir });
+  assert.ok(lines().some((l) => l.event === "tool_call" && l.tool === "delegate"), "delegate must be logged");
 });
