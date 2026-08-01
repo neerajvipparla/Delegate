@@ -50,10 +50,14 @@ export function parseCursorEvents(ndjsonText: string): ParsedEvents {
 
   const output = terminalResult ?? assistantParts.join("");
   const summary = output.length > SUMMARY_MAX_LENGTH ? output.slice(0, SUMMARY_MAX_LENGTH) + "…" : output;
+  // Cursor's terminal `result` event IS the final answer; fall back to the
+  // last assistant block if the stream ended without one.
+  const finalText = terminalResult ?? (assistantParts.length ? assistantParts[assistantParts.length - 1] : "");
 
   return {
     output,
     summary,
+    finalText,
     sessionId,
     tokens: null,
     cost: null,

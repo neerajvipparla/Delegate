@@ -46,8 +46,12 @@ test("withLogging emits tool_call and tool_result lines around a handler", async
   const result = lines().find((l) => l.event === "tool_result" && l.tool === "delegate");
   assert.ok(call, "expected a tool_call line");
   assert.equal(call!.working_directory, workDir);
+  // the full prompt is logged
+  assert.equal(call!.prompt, "hello there");
   assert.ok(result, "expected a tool_result line");
   assert.equal(typeof result!.duration_ms, "number");
+  // which backend handled it is surfaced on the result line
+  assert.equal(result!.backend, "opencode");
   assert.ok(delegated.job_id);
 });
 
@@ -76,11 +80,9 @@ test("runner logs job_spawned and job_finalized for a delegated job", async () =
   // job_spawned carries the resolved working directory (realpath of the input)
   assert.equal(spawned!.working_directory, realpathSync(workDir));
   assert.equal(finalized!.status, "completed");
-  // job_finalized carries the agent's response so the log tells the whole story
-  assert.ok(
-    typeof finalized!.response_preview === "string" && (finalized!.response_preview as string).length > 0,
-    "job_finalized should include a non-empty response_preview"
-  );
+  // job_finalized carries the agent's final answer + which backend ran it
+  assert.match(finalized!.response as string, /echo: hello/);
+  assert.equal(finalized!.backend, "opencode");
 });
 
 test("check_status and list_jobs are silent (no poll spam), delegate is logged", async () => {

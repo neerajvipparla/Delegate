@@ -10,10 +10,11 @@ export type LogLevel = "info" | "warn" | "error";
 export interface LogFields {
   session_id?: string;
   job_id?: string;
+  backend?: string;
   tool?: string;
   working_directory?: string;
-  prompt_preview?: string;
-  response_preview?: string;
+  prompt?: string;
+  response?: string;
   status?: string;
   exit_code?: number | null;
   duration_ms?: number | null;
@@ -22,8 +23,11 @@ export interface LogFields {
   [key: string]: unknown;
 }
 
+// `prompt` and `response` are logged in full (the whole point is to see what
+// was asked and what the agent answered). Only `error` is capped — errors can
+// be arbitrarily large and are never the thing you're reading for.
 const FIELD_TRUNCATE_LIMIT = 500;
-const TRUNCATED_FIELDS = new Set(["prompt_preview", "response_preview", "error"]);
+const TRUNCATED_FIELDS = new Set(["error"]);
 const ONE_DAY_MS = 24 * 60 * 60 * 1000;
 
 let enabled = false;

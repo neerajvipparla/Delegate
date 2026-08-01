@@ -12,6 +12,7 @@ const SAMPLE_NDJSON = [
 test("parses a cursor stream-json event sequence", () => {
   const result = parseCursorEvents(SAMPLE_NDJSON);
   assert.equal(result.output, "Done!");
+  assert.equal(result.finalText, "Done!");
   assert.equal(result.sessionId, "c6b62c6f-7ead-4fd6-9922-e952131177ff");
   assert.equal(result.hasTerminalEvent, true);
   assert.equal(result.tokens, null);

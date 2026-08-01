@@ -34,6 +34,16 @@ test("concatenates multiple text parts in order", () => {
   assert.equal(result.output, "Hello, world.");
 });
 
+test("finalText is the last text block (the answer), not the whole transcript", () => {
+  const ndjson = [
+    '{"type":"text","sessionID":"ses_x","part":{"type":"text","text":"Let me check the files."}}',
+    '{"type":"text","sessionID":"ses_x","part":{"type":"text","text":"The answer is 42."}}',
+  ].join("\n");
+  const result = parseOpencodeEvents(ndjson);
+  assert.equal(result.output, "Let me check the files.The answer is 42.");
+  assert.equal(result.finalText, "The answer is 42.");
+});
+
 test("truncates summary but keeps full output", () => {
   const longText = "a".repeat(300);
   const ndjson = `{"type":"text","sessionID":"ses_x","part":{"type":"text","text":"${longText}"}}`;
