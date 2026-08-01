@@ -1,25 +1,10 @@
-import type { TokenUsage } from "../types.js";
-
-export interface ParsedEvents {
-  output: string;
-  summary: string;
-  sessionId: string | null;
-  tokens: TokenUsage | null;
-  cost: number | null;
-  /**
-   * True once a `step_finish` event with `part.reason === "stop"` has been
-   * seen — i.e. the run's FINAL step (the model decided to stop generating),
-   * not merely any intermediate step in a multi-step agentic run.
-   */
-  hasTerminalEvent: boolean;
-  error: string | null;
-}
+import type { ParsedEvents } from "../types.js";
 
 const SUMMARY_MAX_LENGTH = 200;
 
-export function parseEvents(ndjsonText: string): ParsedEvents {
+export function parseOpencodeEvents(ndjsonText: string): ParsedEvents {
   let sessionId: string | null = null;
-  let tokens: TokenUsage | null = null;
+  let tokens: ParsedEvents["tokens"] = null;
   let cost: number | null = null;
   let hasTerminalEvent = false;
   let error: string | null = null;
@@ -64,5 +49,5 @@ export function parseEvents(ndjsonText: string): ParsedEvents {
   const output = textParts.join("");
   const summary = output.length > SUMMARY_MAX_LENGTH ? output.slice(0, SUMMARY_MAX_LENGTH) + "…" : output;
 
-  return { output, summary, sessionId, tokens, cost, hasTerminalEvent, error };
+  return { output, summary, sessionId, tokens, cost, hasTerminalEvent, error, durationMs: null };
 }

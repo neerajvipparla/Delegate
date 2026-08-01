@@ -1,4 +1,4 @@
-import type { DelegateRequest } from "../types.js";
+import type { DelegateRequest } from "../../types.js";
 
 export function buildOpencodeArgs(request: DelegateRequest): string[] {
   const args: string[] = ["run", "--format", "json", "--auto", "--dir", request.workingDirectory];

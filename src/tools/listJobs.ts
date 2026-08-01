@@ -25,6 +25,7 @@ export async function listJobsHandler(input: ListJobsInput) {
         text: JSON.stringify({
           jobs: limited.map((j) => ({
             job_id: j.jobId,
+            backend: j.backend,
             status: j.status,
             title: j.title,
             started_at: j.startedAt,

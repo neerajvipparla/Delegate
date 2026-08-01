@@ -17,6 +17,7 @@ import type { Job } from "../src/types.js";
 function makeJob(overrides: Partial<Job> = {}): Job {
   return {
     jobId: generateJobId(),
+    backend: "opencode",
     status: "running",
     pid: 1234,
     pidStartedAt: null,

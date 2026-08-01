@@ -22,6 +22,7 @@ export async function checkStatusHandler(input: CheckStatusInput) {
         type: "text" as const,
         text: JSON.stringify({
           job_id: reconciled.jobId,
+          backend: reconciled.backend,
           status: reconciled.status,
           session_id: reconciled.sessionId,
           started_at: reconciled.startedAt,

@@ -50,7 +50,8 @@ export function writeJob(job: Job): void {
 export function readJob(jobId: string): Job | null {
   const path = jobJsonPath(jobId);
   if (!existsSync(path)) return null;
-  return JSON.parse(readFileSync(path, "utf8")) as Job;
+  const raw = JSON.parse(readFileSync(path, "utf8")) as Job & { backend?: Job["backend"] };
+  return { ...raw, backend: raw.backend ?? "opencode" };
 }
 
 export function listJobs(filter?: { status?: JobStatus }, limit?: number): Job[] {

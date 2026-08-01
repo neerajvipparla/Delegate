@@ -1,13 +1,12 @@
 import { spawn, execFileSync } from "node:child_process";
 import { openSync, closeSync, readFileSync, existsSync } from "node:fs";
-import { buildOpencodeArgs } from "../opencode/cli.js";
-import { parseEvents } from "../opencode/events.js";
+import { buildArgs, parseEvents, resolveBin } from "../backends/index.js";
 import * as registry from "./registry.js";
 import type { DelegateRequest, Job } from "../types.js";
 import { log } from "../logging/logger.js";
 
 export function resolveOpencodeBin(): string {
-  return process.env.OPENCODE_BIN ?? "opencode";
+  return resolveBin("opencode");
 }
 
 function cancelGraceMs(): number {
@@ -18,6 +17,7 @@ export function spawnJob(request: DelegateRequest, jobId: string): Job {
   const startedAt = new Date().toISOString();
   const job: Job = {
     jobId,
+    backend: request.backend,
     status: "running",
     pid: null,
     pidStartedAt: null,
@@ -36,12 +36,16 @@ export function spawnJob(request: DelegateRequest, jobId: string): Job {
   };
   registry.createJob(job);
 
+  const bin = resolveBin(request.backend);
+  const args = buildArgs(request, request.backend);
+
   const outFd = openSync(registry.eventsPath(jobId), "a");
   const errFd = openSync(registry.stderrPath(jobId), "a");
 
-  const child = spawn(resolveOpencodeBin(), buildOpencodeArgs(request), {
+  const child = spawn(bin, args, {
     detached: true,
     stdio: ["ignore", outFd, errFd],
+    env: process.env,
   });
   closeSync(outFd);
   closeSync(errFd);
@@ -51,8 +55,9 @@ export function spawnJob(request: DelegateRequest, jobId: string): Job {
     job.pidStartedAt = startedAt;
     registry.writeJob(job);
   }
-  log("info", "job_spawned", "spawned opencode job", {
+  log("info", "job_spawned", "spawned delegate job", {
     job_id: jobId,
+    backend: request.backend,
     working_directory: request.workingDirectory,
     opencode_pid: child.pid ?? null,
   });
@@ -63,7 +68,7 @@ export function spawnJob(request: DelegateRequest, jobId: string): Job {
       clearInterval(pollHandle);
       return;
     }
-    const parsed = parseEvents(readFileSync(registry.eventsPath(jobId), "utf8"));
+    const parsed = parseEvents(readFileSync(registry.eventsPath(jobId), "utf8"), request.backend);
     if (parsed.sessionId) {
       registry.writeJob({ ...current, sessionId: parsed.sessionId });
       registry.indexSession(parsed.sessionId, jobId);
@@ -81,7 +86,7 @@ export function spawnJob(request: DelegateRequest, jobId: string): Job {
       error: err.message,
       finishedAt: new Date().toISOString(),
     });
-    log("error", "error", "opencode spawn error", { job_id: jobId, error: err.message });
+    log("error", "error", "delegate spawn error", { job_id: jobId, backend: request.backend, error: err.message });
   });
 
   child.on("exit", (code) => {
@@ -98,9 +103,6 @@ function finalizeJob(jobId: string, exitCode: number | null): void {
   if (!current) return;
 
   if (current.status !== "running") {
-    // Already terminal (e.g. cancelled by cancelJob before the signaled
-    // process's exit event fired) — don't let a signal-killed process's
-    // exitCode (null, which reads as "failed" below) clobber that status.
     registry.writeJob({
       ...current,
       exitCode: current.exitCode ?? exitCode,
@@ -109,7 +111,7 @@ function finalizeJob(jobId: string, exitCode: number | null): void {
     return;
   }
 
-  const parsed = parseEvents(readFileSync(registry.eventsPath(jobId), "utf8"));
+  const parsed = parseEvents(readFileSync(registry.eventsPath(jobId), "utf8"), current.backend);
   const stderrTail = readStderrTail(jobId);
 
   registry.writeJob({
@@ -120,11 +122,12 @@ function finalizeJob(jobId: string, exitCode: number | null): void {
     tokens: parsed.tokens ?? current.tokens,
     cost: parsed.cost ?? current.cost,
     sessionId: parsed.sessionId ?? current.sessionId,
-    error: exitCode === 0 ? null : parsed.error || stderrTail || `opencode exited with code ${exitCode}`,
+    error: exitCode === 0 ? null : parsed.error || stderrTail || `process exited with code ${exitCode}`,
   });
 
   log("info", "job_finalized", "job finalized", {
     job_id: jobId,
+    backend: current.backend,
     session_id: parsed.sessionId ?? current.sessionId ?? undefined,
     status: exitCode === 0 ? "completed" : "failed",
     exit_code: exitCode,
@@ -147,7 +150,7 @@ export function reconcileJob(job: Job): Job {
   if (job.status !== "running") return job;
   if (job.pid && isPidAlive(job.pid)) return job;
 
-  const parsed = parseEvents(readFileSync(registry.eventsPath(job.jobId), "utf8"));
+  const parsed = parseEvents(readFileSync(registry.eventsPath(job.jobId), "utf8"), job.backend);
   const stderrTail = readStderrTail(job.jobId);
 
   const updated: Job = parsed.hasTerminalEvent
@@ -214,7 +217,11 @@ export function cancelJob(jobId: string): Job {
 
   const updated: Job = { ...job, status: "cancelled", finishedAt: new Date().toISOString() };
   registry.writeJob(updated);
-  log("info", "job_cancelled", "job cancelled", { job_id: jobId, session_id: job.sessionId ?? undefined });
+  log("info", "job_cancelled", "job cancelled", {
+    job_id: jobId,
+    backend: job.backend,
+    session_id: job.sessionId ?? undefined,
+  });
 
   if (!pidLooksLikeOurs(job)) {
     return updated;

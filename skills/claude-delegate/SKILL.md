@@ -1,27 +1,64 @@
 ---
 name: claude-delegate
-description: Use when the claude-delegate MCP server's tools (delegate, delegate_sync, check_status, get_result, list_jobs, cancel_job) are available and you want to hand a coding or research task off to OpenCode instead of doing it yourself
+description: Use when the claude-delegate MCP server's tools (delegate, delegate_sync, check_status, get_result, list_jobs, cancel_job) are available and you want to hand a coding or research task off to OpenCode or Cursor instead of doing it yourself. You pick the backend from the user's words; the user never sets backend flags.
 ---
 
 # Using claude-delegate
 
-claude-delegate gives you six tools to run OpenCode as a background worker
-against a target `working_directory`, instead of doing the work yourself.
+claude-delegate gives you six tools to run **OpenCode** or **Cursor** as a background
+worker against a target `working_directory`, instead of doing the work yourself.
 You stay the orchestrator: delegate the task, get a structured result back
-(summary, output, tokens, cost), and continue reasoning with it.
+(summary, output, tokens when available, cost when available), and continue
+reasoning with it.
+
+## Picking the backend (OpenCode vs Cursor)
+
+The user never passes a backend flag. You choose it from what they said.
+Set `backend` on `delegate` / `delegate_sync` — never ask the user to pick
+unless both runtimes are unavailable.
+
+### When the user names a runtime
+
+| User says (examples) | Set `backend` |
+|----------------------|---------------|
+| "cursor", "Cursor agent", "Cursor CLI" | `"cursor"` |
+| "opencode", "OpenCode" | `"opencode"` |
+
+Match intent, not exact wording. "Have Cursor do it" → cursor. "Use opencode for this" → opencode.
+
+### When the user does not name a runtime
+
+Default to **`"opencode"`** unless you have a concrete reason to use Cursor:
+
+- Use **`"cursor"`** when the user clearly wants Cursor-specific behavior:
+  plan-only review (`mode: "plan"`), ask/Q&A mode (`mode: "ask"`), or they routinely delegate to Cursor in this project.
+- Use **`"opencode"`** for ordinary coding/research delegation (current default behavior).
+
+If ambiguous and both are installed, prefer **opencode** for general coding tasks.
+Do not interrupt the user to ask which runtime — pick one and proceed.
+
+### Backend-specific parameters (you set these, not the user)
+
+| Parameter | Backend | Notes |
+|-----------|---------|-------|
+| `agent` | opencode only | e.g. `"build"` |
+| `fork` | opencode only | fork a session branch |
+| `mode` | cursor only | `"plan"` (read-only) or `"ask"` (Q&A) |
+
+Never pass `fork` or `agent` with `backend: "cursor"`. Never pass `mode` with `backend: "opencode"`.
 
 ## Before you delegate anything
 
-**Every delegated run passes `--auto` to OpenCode.** This auto-approves
-file writes and shell command execution inside `working_directory` —
-OpenCode does not pause to ask permission. Only delegate into a directory
-you're comfortable being modified unattended. If you're not sure the user
-wants unattended file changes in a given repo, ask before delegating there,
+**Every delegated run auto-approves file writes and shell commands** inside
+`working_directory` — OpenCode via `--auto`, Cursor via `--force`. Neither
+runtime pauses to ask permission. Only delegate into a directory you're
+comfortable being modified unattended. If you're not sure the user wants
+unattended file changes in a given repo, ask before delegating there,
 the same way you'd ask before running a destructive command yourself.
 
 ## Picking `delegate` vs `delegate_sync`
 
-Both start the same underlying OpenCode job. The difference is only in how
+Both start the same underlying job (OpenCode or Cursor). The difference is only in how
 you get the result back.
 
 - **`delegate_sync`** — use this by default for a single, bounded task where
@@ -29,14 +66,13 @@ you get the result back.
   It blocks until the job finishes (or one of two safety limits below is
   hit) and hands you the final result directly — no manual polling loop.
 - **`delegate`** — use this when you want to keep working on something else
-  while OpenCode runs, or when you're fanning out several tasks in parallel
+  while the worker runs, or when you're fanning out several tasks in parallel
   (dispatch multiple `delegate()` calls, then poll each with
   `check_status`/`get_result` as you get to them). `delegate` returns
-  quickly with `{ job_id, status: "running", started_at, session_id }` — it
-  waits briefly (up to 8s) for OpenCode's `session_id` to show up before
+  quickly with `{ job_id, backend, status: "running", started_at, session_id }` — it
+  waits briefly (up to 8s) for the worker's `session_id` to show up before
   returning, so you have something to inspect right away instead of only a
-  job ID (`session_id` can still be `null` if OpenCode is unusually slow to
-  start — real time-to-first-event varies from ~1s to ~5s+, so this is
+  job ID (`session_id` can still be `null` if startup is unusually slow —
   best-effort, not guaranteed). You are responsible for checking back on
   the job. Nothing pushes a notification; if you don't poll, the job runs
   to completion in the background and its result just sits there unread.
@@ -52,11 +88,12 @@ final:
 
 1. **`status: "completed"` or `"failed"`** — the job actually finished.
    Same shape as `get_result`: `summary`, `output` (capped at 8000 chars
-   unless you pass `full_output: true`), `tokens`, `cost`, `error`. This is
-   the common case for short-to-medium tasks.
+   unless you pass `full_output: true`), `tokens`, `cost`, `error`. Cursor
+   jobs return `tokens: null` and `cost: null` (the Cursor CLI does not
+   emit usage in its stream output). This is the common case for short-to-medium tasks.
 2. **`status: "running"`, `timed_out: true`** — the job was still healthy
    but took longer than `max_wait_ms` (default 5 minutes). **The job was
-   NOT killed** — it's still running. You get a `job_id` and (usually)
+   NOT killed** — it's still running. You get a `job_id`, `backend`, and (usually)
    `session_id`; follow up later with `check_status(job_id)` /
    `get_result(job_id)` instead of re-delegating the same task.
 3. **`status: "running"`, `aborted: true`** — your own request got
@@ -65,10 +102,10 @@ final:
    your own client moves a slow tool call to the background). Same as
    above: the job is still running, use the returned `job_id` to check on
    it later.
-4. **`status: "cancelled"`, `stalled: true`** — OpenCode produced no new
+4. **`status: "cancelled"`, `stalled: true`** — the worker produced no new
    output for `stall_timeout_ms` (default 10 minutes) and was killed as
-   presumed-hung. This default is deliberately high: OpenCode emits
-   nothing at all while a tool call is in progress, so a long build, test
+   presumed-hung. This default is deliberately high: both OpenCode and Cursor
+   emit nothing at all while a tool call is in progress, so a long build, test
    suite, or install can legitimately go silent for many minutes without
    being stuck. If you're delegating something you know is short and
    tool-call-light, you can pass a smaller `stall_timeout_ms` for faster
@@ -78,19 +115,21 @@ final:
 ## Continuing a session
 
 Pass the `session_id` from a prior result (or from `check_status`) to
-continue the same OpenCode conversation instead of starting fresh. **The
-`working_directory` must be identical to the original call.** OpenCode
-sessions are directory-scoped; continuing one from a different directory
-doesn't fail cleanly, it hangs — so this server rejects the mismatch itself
-before it can happen. If you get an error like `session_id ... was created
-in X, not Y`, use the original directory.
+continue the same conversation instead of starting fresh. **Use the same
+`backend` that created the session**, and the **`working_directory` must
+be identical to the original call.** Sessions are directory-scoped;
+continuing one from a different directory doesn't fail cleanly, it hangs —
+so this server rejects the mismatch itself before it can happen. If you get
+an error like `session_id ... was created in X, not Y`, use the original
+directory. If you get a backend mismatch error, resume with the backend
+shown on the original job (`get_result` / `check_status` include `backend`).
 
 ## Manual polling with `delegate`
 
 If you use `delegate` instead of `delegate_sync`, the follow-up loop looks
 like:
 
-1. `delegate(...)` → note the `job_id`.
+1. `delegate(...)` → note the `job_id` and `backend`.
 2. Do other work, or wait a bit.
 3. `check_status(job_id)` — cheap, tells you `status` without building the
    full result payload. Use this if you just want to know "is it done yet."
@@ -101,13 +140,16 @@ like:
 5. `list_jobs(status?, limit?)` if you've lost track of what's running.
 6. `cancel_job(job_id)` if you no longer need a running job's result —
    don't just abandon it if it's doing something you don't want to happen
-   (e.g. mid-write under `--auto`).
+   (e.g. mid-write under auto-approve).
 
 ## Troubleshooting
 
 - **"opencode binary not found"** — the `opencode` CLI isn't on `PATH` (or
   `OPENCODE_BIN`) in the environment running this MCP server. Not something
   you can fix from inside a conversation; tell the user.
+- **"cursor agent binary not found"** — the `agent` CLI isn't on `PATH` (or
+  `CURSOR_AGENT_BIN`). Tell the user to install the Cursor CLI and/or set
+  `CURSOR_API_KEY` or run `agent login`.
 - **A job seems stuck at `status: "running"` forever** — check
   `get_result(job_id)` for partial output first (did it actually start?),
   then `cancel_job(job_id)` if you conclude it's not going to finish. Job
@@ -117,7 +159,7 @@ like:
   `timed_out: true`** — that's normal for anything that legitimately takes
   longer than 5 minutes; don't re-delegate the same prompt, just poll the
   returned `job_id`.
-- **"Where can I watch what OpenCode is doing live?"** — if the user has
+- **"Where can I watch what the worker is doing live?"** — if the user has
   enabled logging (off by default; set `logging.enabled: true` in the repo's
   `config.json`), a live view of all sessions is at `http://127.0.0.1:<port>`
   (default port 4599), with a per-session filter. The same events are in
