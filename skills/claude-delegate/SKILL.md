@@ -117,3 +117,8 @@ like:
   `timed_out: true`** — that's normal for anything that legitimately takes
   longer than 5 minutes; don't re-delegate the same prompt, just poll the
   returned `job_id`.
+- **"Where can I watch what OpenCode is doing live?"** — if the user has
+  enabled logging (off by default; set `logging.enabled: true` in the repo's
+  `config.json`), a live view of all sessions is at `http://127.0.0.1:<port>`
+  (default port 4599), with a per-session filter. The same events are in
+  `~/.claude-delegate/logs/server.log` as NDJSON.
