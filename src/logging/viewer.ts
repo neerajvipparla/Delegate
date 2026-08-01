@@ -3,25 +3,30 @@ import { closeSync, existsSync, openSync, readSync, statSync } from "node:fs";
 
 export function startViewer(port: number, logFilePath: string, onError?: (err: Error) => void): Server {
   const server = createServer((req, res) => {
-    const url = new URL(req.url ?? "/", "http://127.0.0.1");
+    try {
+      const url = new URL(req.url ?? "/", "http://127.0.0.1");
 
-    if (url.pathname === "/logs") {
-      const raw = Number(url.searchParams.get("offset") ?? "0");
-      const offset = Number.isFinite(raw) && raw >= 0 ? raw : 0;
-      const { nextOffset, data } = readFrom(logFilePath, offset);
-      res.writeHead(200, { "content-type": "application/json" });
-      res.end(JSON.stringify({ nextOffset, data }));
-      return;
+      if (url.pathname === "/logs") {
+        const raw = Number(url.searchParams.get("offset") ?? "0");
+        const offset = Number.isFinite(raw) && raw >= 0 ? raw : 0;
+        const { nextOffset, data } = readFrom(logFilePath, offset);
+        res.writeHead(200, { "content-type": "application/json" });
+        res.end(JSON.stringify({ nextOffset, data }));
+        return;
+      }
+
+      if (url.pathname === "/") {
+        res.writeHead(200, { "content-type": "text/html; charset=utf-8" });
+        res.end(PAGE_HTML);
+        return;
+      }
+
+      res.writeHead(404, { "content-type": "text/plain" });
+      res.end("not found");
+    } catch (err) {
+      res.writeHead(500, { "content-type": "text/plain" });
+      res.end("internal error");
     }
-
-    if (url.pathname === "/") {
-      res.writeHead(200, { "content-type": "text/html; charset=utf-8" });
-      res.end(PAGE_HTML);
-      return;
-    }
-
-    res.writeHead(404, { "content-type": "text/plain" });
-    res.end("not found");
   });
 
   // Never let a bind/listen failure crash the process. EADDRINUSE (a second
@@ -88,7 +93,7 @@ const PAGE_HTML = `<!doctype html>
   const rows = [];
   const logEl = document.getElementById('log');
   const filterEl = document.getElementById('session-filter');
-  function esc(s){ return String(s).replace(/[&<>]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;'}[c])); }
+  function esc(s){ return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
   function shortSid(s){ return s ? s.slice(0,10) : '—'; }
   function render(){
     const sel = filterEl.value;

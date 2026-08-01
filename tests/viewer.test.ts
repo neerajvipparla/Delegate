@@ -1,6 +1,6 @@
 import { test, beforeEach, afterEach } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, rmSync, writeFileSync, appendFileSync } from "node:fs";
+import { mkdtempSync, rmSync, writeFileSync, appendFileSync, mkdirSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { once } from "node:events";
@@ -84,4 +84,13 @@ test("a second viewer on an already-bound port does not throw and reports the er
   // give the async error handler a tick
   await new Promise((r) => setTimeout(r, 50));
   assert.ok(captured, "onError should have been called for the port collision");
+});
+
+test("GET /logs returns 500 when the log path is a directory instead of a file", async () => {
+  const logDir = join(dir, "logdir");
+  mkdirSync(logDir);
+  const server = await start(0, logDir);
+  const { status, text } = await get(portOf(server), "/logs?offset=0");
+  assert.equal(status, 500);
+  assert.equal(text, "internal error");
 });
